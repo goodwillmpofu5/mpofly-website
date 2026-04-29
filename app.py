@@ -863,7 +863,7 @@ def send_message():
         "Other"
     ]
 
-    email_pattern = r"^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"
+    email_pattern = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
 
     if len(fullname) == 0 or len(fullname) > 50:
         return jsonify({
