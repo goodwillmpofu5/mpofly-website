@@ -1,8 +1,8 @@
-import os
 from flask import Flask, render_template_string, request, jsonify, url_for
 import smtplib
 from email.message import EmailMessage
 import re
+import os
 
 app = Flask(__name__, static_folder="static")
 
@@ -12,21 +12,21 @@ app = Flask(__name__, static_folder="static")
 RECEIVER_EMAIL = "goodwillmpofu5@gmail.com"
 SENDER_EMAIL = "goodwillmpofu5@gmail.com"
 
-# Paste your real Gmail App Password here.
-# Do not use your normal Gmail password.
-# Do not share this password publicly.
+# IMPORTANT:
+# On Render, add this as an Environment Variable:
+# Key: SENDER_APP_PASSWORD
+# Value: your actual Gmail App Password
 SENDER_APP_PASSWORD = os.environ.get("SENDER_APP_PASSWORD")
 
 # ==========================
 # BUSINESS CONTACT DETAILS
 # ==========================
 BUSINESS_CELLPHONE = "076 394 2737"
+BUSINESS_WEBSITE = "https://www.mpofly.co.za"
 
 # ==========================
 # LOGO FILE
 # ==========================
-# Your logo must be saved inside the static folder as:
-# static/mpofly-logo.png
 LOGO_FILENAME = "mpofly-logo.png"
 
 
@@ -272,6 +272,12 @@ website_html = """
             font-size: 1.15em;
         }
 
+        .business-website {
+            font-weight: bold;
+            color: #001f4d;
+            text-decoration: underline;
+        }
+
         footer {
             background-color: #001f4d;
             color: white;
@@ -290,6 +296,17 @@ website_html = """
 
         footer p {
             margin: 5px 0;
+        }
+
+        .footer-link {
+            color: #bfe7ff;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .footer-link:hover {
+            color: white;
+            text-decoration: underline;
         }
 
         .popup-overlay {
@@ -637,6 +654,13 @@ website_html = """
                     Business cellphone:
                     <span class="business-phone">076 394 2737</span>
                 </p>
+
+                <p>
+                    Website:
+                    <a href="{{ business_website }}" target="_blank" class="business-website">
+                        www.mpofly.co.za
+                    </a>
+                </p>
             </div>
         </section>
     </div>
@@ -645,6 +669,12 @@ website_html = """
         <img src="{{ logo_url }}" alt="Mpofly Logo" class="footer-logo">
         <p>&copy; 2026 Mpofly. All rights reserved.</p>
         <p>Business Cellphone: 076 394 2737</p>
+        <p>
+            Website:
+            <a href="{{ business_website }}" target="_blank" class="footer-link">
+                www.mpofly.co.za
+            </a>
+        </p>
     </footer>
 
     <div class="popup-overlay" id="contactPopup">
@@ -801,7 +831,14 @@ website_html = """
                     })
                 });
 
-                const result = await response.json();
+                const text = await response.text();
+
+                let result;
+                try {
+                    result = JSON.parse(text);
+                } catch (error) {
+                    throw new Error("Server returned this instead of JSON: " + text);
+                }
 
                 if (result.success) {
                     successMessage.textContent = "Thank you. Your message has been sent successfully.";
@@ -819,7 +856,7 @@ website_html = """
                 }
 
             } catch (error) {
-                errorMessage.textContent = "Error: Could not connect to the server.";
+                errorMessage.textContent = "Error: " + error.message;
                 errorMessage.style.display = "block";
             }
         });
@@ -840,12 +877,22 @@ website_html = """
 @app.route("/")
 def home():
     logo_url = url_for("static", filename=LOGO_FILENAME)
-    return render_template_string(website_html, logo_url=logo_url)
+    return render_template_string(
+        website_html,
+        logo_url=logo_url,
+        business_website=BUSINESS_WEBSITE
+    )
 
 
 @app.route("/send-message", methods=["POST"])
 def send_message():
     data = request.get_json()
+
+    if data is None:
+        return jsonify({
+            "success": False,
+            "error": "No form data received."
+        })
 
     fullname = data.get("fullname", "").strip()
     email = data.get("email", "").strip()
@@ -895,6 +942,12 @@ def send_message():
             "error": "Invalid message. Maximum is 100 characters."
         })
 
+    if not SENDER_APP_PASSWORD:
+        return jsonify({
+            "success": False,
+            "error": "Email password is missing. Add SENDER_APP_PASSWORD in Render Environment Variables."
+        })
+
     try:
         email_message = EmailMessage()
         email_message["Subject"] = "New Mpofly Contact Form Message"
@@ -907,6 +960,9 @@ New contact form message from the Mpofly website.
 
 Business Cellphone:
 {BUSINESS_CELLPHONE}
+
+Website:
+{BUSINESS_WEBSITE}
 
 Client Full Name:
 {fullname}
