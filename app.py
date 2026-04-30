@@ -1,11 +1,7 @@
-from flask import Flask, render_template_string, request, jsonify, url_for
+from flask import Flask, render_template_string, url_for
 from werkzeug.exceptions import HTTPException
-import re
 import os
-import json
 import traceback
-import urllib.request
-import urllib.error
 
 app = Flask(__name__, static_folder="static")
 
@@ -15,7 +11,7 @@ app = Flask(__name__, static_folder="static")
 # On Render, add this Environment Variable:
 # Key: WEB3FORMS_ACCESS_KEY
 # Value: your Web3Forms access key
-WEB3FORMS_ACCESS_KEY = os.environ.get("WEB3FORMS_ACCESS_KEY")
+WEB3FORMS_ACCESS_KEY = os.environ.get("WEB3FORMS_ACCESS_KEY", "")
 
 # ==========================
 # BUSINESS CONTACT DETAILS
@@ -39,10 +35,7 @@ def handle_unexpected_error(error):
     print("Unexpected server error:")
     print(traceback.format_exc())
 
-    return jsonify({
-        "success": False,
-        "error": str(error)
-    }), 500
+    return "Internal Server Error", 500
 
 
 website_html = """
@@ -831,18 +824,32 @@ website_html = """
                 return;
             }
 
+            if (!"{{ web3forms_access_key }}") {
+                errorMessage.textContent = "Error: Web3Forms access key is missing. Add WEB3FORMS_ACCESS_KEY in Render Environment Variables.";
+                errorMessage.style.display = "block";
+                return;
+            }
+
             try {
-                const response = await fetch("/send-message", {
+                const response = await fetch("https://api.web3forms.com/submit", {
                     method: "POST",
                     headers: {
-                        "Content-Type": "application/json"
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
                     },
                     body: JSON.stringify({
-                        fullname: fullname,
+                        access_key: "{{ web3forms_access_key }}",
+                        subject: "New Mpofly Contact Form Message",
+                        from_name: "Mpofly Website",
+                        name: fullname,
                         email: email,
-                        cellphone: cellphone,
-                        service: service,
-                        message: message
+                        phone: cellphone,
+                        service_required: service,
+                        message: message,
+                        business_email: "{{ business_email }}",
+                        business_cellphone: "076 394 2737",
+                        business_website: "https://www.mpofly.co.za",
+                        botcheck: ""
                     })
                 });
 
@@ -859,7 +866,7 @@ website_html = """
                         closePopup();
                     }, 2500);
                 } else {
-                    errorMessage.textContent = "Error: " + result.error;
+                    errorMessage.textContent = "Error: " + (result.message || "Message could not be sent.");
                     errorMessage.style.display = "block";
                 }
 
@@ -888,131 +895,10 @@ def home():
     return render_template_string(
         website_html,
         logo_url=logo_url,
-        business_website=BUSINESS_WEBSITE
+        business_email=BUSINESS_EMAIL,
+        business_website=BUSINESS_WEBSITE,
+        web3forms_access_key=WEB3FORMS_ACCESS_KEY
     )
-
-
-@app.route("/send-message", methods=["POST"])
-def send_message():
-    try:
-        data = request.get_json(silent=True)
-
-        if data is None:
-            return jsonify({
-                "success": False,
-                "error": "No form data received."
-            })
-
-        fullname = data.get("fullname", "").strip()
-        email = data.get("email", "").strip()
-        cellphone = data.get("cellphone", "").strip()
-        service = data.get("service", "").strip()
-        message = data.get("message", "").strip()
-
-        valid_services = [
-            "Accounting Services",
-            "Company Support Services",
-            "Tender Support Services",
-            "Payroll Administration",
-            "Business Intelligence and Analysis",
-            "Human Resource and Talent Solutions",
-            "Other"
-        ]
-
-        email_pattern = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
-
-        if len(fullname) == 0 or len(fullname) > 50:
-            return jsonify({
-                "success": False,
-                "error": "Invalid full name. Maximum is 50 characters."
-            })
-
-        if not re.match(email_pattern, email):
-            return jsonify({
-                "success": False,
-                "error": "Invalid email address."
-            })
-
-        if not cellphone.isdigit() or len(cellphone) != 10:
-            return jsonify({
-                "success": False,
-                "error": "Invalid cellphone number. It must be exactly 10 digits."
-            })
-
-        if service not in valid_services:
-            return jsonify({
-                "success": False,
-                "error": "Invalid service selected."
-            })
-
-        if len(message) == 0 or len(message) > 100:
-            return jsonify({
-                "success": False,
-                "error": "Invalid message. Maximum is 100 characters."
-            })
-
-        if not WEB3FORMS_ACCESS_KEY:
-            return jsonify({
-                "success": False,
-                "error": "Web3Forms access key is missing. Add WEB3FORMS_ACCESS_KEY in Render Environment Variables."
-            })
-
-        web3forms_payload = {
-            "access_key": WEB3FORMS_ACCESS_KEY,
-            "subject": "New Mpofly Contact Form Message",
-            "from_name": "Mpofly Website",
-            "email": email,
-            "name": fullname,
-            "phone": cellphone,
-            "service_required": service,
-            "message": message,
-            "business_cellphone": BUSINESS_CELLPHONE,
-            "business_website": BUSINESS_WEBSITE,
-            "to_email": BUSINESS_EMAIL
-        }
-
-        request_data = json.dumps(web3forms_payload).encode("utf-8")
-
-        web3forms_request = urllib.request.Request(
-            "https://api.web3forms.com/submit",
-            data=request_data,
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            },
-            method="POST"
-        )
-
-        with urllib.request.urlopen(web3forms_request, timeout=30) as response:
-            response_body = response.read().decode("utf-8")
-            web3forms_response = json.loads(response_body)
-
-        if web3forms_response.get("success"):
-            return jsonify({"success": True})
-
-        return jsonify({
-            "success": False,
-            "error": web3forms_response.get("message", "Web3Forms could not send the message.")
-        })
-
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8", errors="replace")
-        print("Web3Forms HTTP error:")
-        print(error_body)
-
-        return jsonify({
-            "success": False,
-            "error": error_body
-        }), 500
-
-    except Exception as e:
-        print("Contact form sending error:")
-        print(traceback.format_exc())
-
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        }), 500
 
 
 if __name__ == "__main__":
