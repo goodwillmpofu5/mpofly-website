@@ -1,27 +1,26 @@
 from flask import Flask, render_template_string, request, jsonify, url_for
 from werkzeug.exceptions import HTTPException
-import smtplib
-from email.message import EmailMessage
 import re
 import os
+import json
 import traceback
+import urllib.request
+import urllib.error
 
 app = Flask(__name__, static_folder="static")
 
 # ==========================
-# GMAIL SETTINGS
+# WEB3FORMS SETTINGS
 # ==========================
-RECEIVER_EMAIL = "goodwillmpofu5@gmail.com"
-SENDER_EMAIL = "goodwillmpofu5@gmail.com"
-
-# On Render, add this as an Environment Variable:
-# Key: SENDER_APP_PASSWORD
-# Value: your actual Gmail App Password
-SENDER_APP_PASSWORD = os.environ.get("SENDER_APP_PASSWORD")
+# On Render, add this Environment Variable:
+# Key: WEB3FORMS_ACCESS_KEY
+# Value: your Web3Forms access key
+WEB3FORMS_ACCESS_KEY = os.environ.get("WEB3FORMS_ACCESS_KEY")
 
 # ==========================
 # BUSINESS CONTACT DETAILS
 # ==========================
+BUSINESS_EMAIL = "goodwillmpofu5@gmail.com"
 BUSINESS_CELLPHONE = "076 394 2737"
 BUSINESS_WEBSITE = "https://www.mpofly.co.za"
 
@@ -34,10 +33,6 @@ LOGO_FILENAME = "mpofly-logo.png"
 
 @app.errorhandler(Exception)
 def handle_unexpected_error(error):
-    """
-    Ensures unexpected Flask errors are logged properly.
-    Normal HTTP errors like 404 and 405 are left as they are.
-    """
     if isinstance(error, HTTPException):
         return error
 
@@ -851,14 +846,7 @@ website_html = """
                     })
                 });
 
-                const text = await response.text();
-
-                let result;
-                try {
-                    result = JSON.parse(text);
-                } catch (error) {
-                    throw new Error("Server returned this instead of JSON: " + text);
-                }
+                const result = await response.json();
 
                 if (result.success) {
                     successMessage.textContent = "Thank you. Your message has been sent successfully.";
@@ -963,51 +951,62 @@ def send_message():
                 "error": "Invalid message. Maximum is 100 characters."
             })
 
-        if not SENDER_APP_PASSWORD:
+        if not WEB3FORMS_ACCESS_KEY:
             return jsonify({
                 "success": False,
-                "error": "Email password is missing. Add SENDER_APP_PASSWORD in Render Environment Variables."
+                "error": "Web3Forms access key is missing. Add WEB3FORMS_ACCESS_KEY in Render Environment Variables."
             })
 
-        email_message = EmailMessage()
-        email_message["Subject"] = "New Mpofly Contact Form Message"
-        email_message["From"] = SENDER_EMAIL
-        email_message["To"] = RECEIVER_EMAIL
-        email_message["Reply-To"] = email
+        web3forms_payload = {
+            "access_key": WEB3FORMS_ACCESS_KEY,
+            "subject": "New Mpofly Contact Form Message",
+            "from_name": "Mpofly Website",
+            "email": email,
+            "name": fullname,
+            "phone": cellphone,
+            "service_required": service,
+            "message": message,
+            "business_cellphone": BUSINESS_CELLPHONE,
+            "business_website": BUSINESS_WEBSITE,
+            "to_email": BUSINESS_EMAIL
+        }
 
-        email_message.set_content(f"""
-New contact form message from the Mpofly website.
+        request_data = json.dumps(web3forms_payload).encode("utf-8")
 
-Business Cellphone:
-{BUSINESS_CELLPHONE}
+        web3forms_request = urllib.request.Request(
+            "https://api.web3forms.com/submit",
+            data=request_data,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            method="POST"
+        )
 
-Website:
-{BUSINESS_WEBSITE}
+        with urllib.request.urlopen(web3forms_request, timeout=30) as response:
+            response_body = response.read().decode("utf-8")
+            web3forms_response = json.loads(response_body)
 
-Client Full Name:
-{fullname}
+        if web3forms_response.get("success"):
+            return jsonify({"success": True})
 
-Client Email:
-{email}
+        return jsonify({
+            "success": False,
+            "error": web3forms_response.get("message", "Web3Forms could not send the message.")
+        })
 
-Client Cellphone:
-{cellphone}
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        print("Web3Forms HTTP error:")
+        print(error_body)
 
-Service Required:
-{service}
-
-Client Message:
-{message}
-""")
-
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
-            smtp.login(SENDER_EMAIL, SENDER_APP_PASSWORD)
-            smtp.send_message(email_message)
-
-        return jsonify({"success": True})
+        return jsonify({
+            "success": False,
+            "error": error_body
+        }), 500
 
     except Exception as e:
-        print("Email sending error:")
+        print("Contact form sending error:")
         print(traceback.format_exc())
 
         return jsonify({
@@ -1017,4 +1016,4 @@ Client Message:
 
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=False)S
