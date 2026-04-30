@@ -1,8 +1,10 @@
 from flask import Flask, render_template_string, request, jsonify, url_for
+from werkzeug.exceptions import HTTPException
 import smtplib
 from email.message import EmailMessage
 import re
 import os
+import traceback
 
 app = Flask(__name__, static_folder="static")
 
@@ -12,7 +14,6 @@ app = Flask(__name__, static_folder="static")
 RECEIVER_EMAIL = "goodwillmpofu5@gmail.com"
 SENDER_EMAIL = "goodwillmpofu5@gmail.com"
 
-# IMPORTANT:
 # On Render, add this as an Environment Variable:
 # Key: SENDER_APP_PASSWORD
 # Value: your actual Gmail App Password
@@ -27,7 +28,26 @@ BUSINESS_WEBSITE = "https://www.mpofly.co.za"
 # ==========================
 # LOGO FILE
 # ==========================
+# Logo must be saved as: static/mpofly-logo.png
 LOGO_FILENAME = "mpofly-logo.png"
+
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(error):
+    """
+    Ensures unexpected Flask errors are logged properly.
+    Normal HTTP errors like 404 and 405 are left as they are.
+    """
+    if isinstance(error, HTTPException):
+        return error
+
+    print("Unexpected server error:")
+    print(traceback.format_exc())
+
+    return jsonify({
+        "success": False,
+        "error": str(error)
+    }), 500
 
 
 website_html = """
@@ -886,69 +906,69 @@ def home():
 
 @app.route("/send-message", methods=["POST"])
 def send_message():
-    data = request.get_json()
-
-    if data is None:
-        return jsonify({
-            "success": False,
-            "error": "No form data received."
-        })
-
-    fullname = data.get("fullname", "").strip()
-    email = data.get("email", "").strip()
-    cellphone = data.get("cellphone", "").strip()
-    service = data.get("service", "").strip()
-    message = data.get("message", "").strip()
-
-    valid_services = [
-        "Accounting Services",
-        "Company Support Services",
-        "Tender Support Services",
-        "Payroll Administration",
-        "Business Intelligence and Analysis",
-        "Human Resource and Talent Solutions",
-        "Other"
-    ]
-
-    email_pattern = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
-
-    if len(fullname) == 0 or len(fullname) > 50:
-        return jsonify({
-            "success": False,
-            "error": "Invalid full name. Maximum is 50 characters."
-        })
-
-    if not re.match(email_pattern, email):
-        return jsonify({
-            "success": False,
-            "error": "Invalid email address."
-        })
-
-    if not cellphone.isdigit() or len(cellphone) != 10:
-        return jsonify({
-            "success": False,
-            "error": "Invalid cellphone number. It must be exactly 10 digits."
-        })
-
-    if service not in valid_services:
-        return jsonify({
-            "success": False,
-            "error": "Invalid service selected."
-        })
-
-    if len(message) == 0 or len(message) > 100:
-        return jsonify({
-            "success": False,
-            "error": "Invalid message. Maximum is 100 characters."
-        })
-
-    if not SENDER_APP_PASSWORD:
-        return jsonify({
-            "success": False,
-            "error": "Email password is missing. Add SENDER_APP_PASSWORD in Render Environment Variables."
-        })
-
     try:
+        data = request.get_json(silent=True)
+
+        if data is None:
+            return jsonify({
+                "success": False,
+                "error": "No form data received."
+            })
+
+        fullname = data.get("fullname", "").strip()
+        email = data.get("email", "").strip()
+        cellphone = data.get("cellphone", "").strip()
+        service = data.get("service", "").strip()
+        message = data.get("message", "").strip()
+
+        valid_services = [
+            "Accounting Services",
+            "Company Support Services",
+            "Tender Support Services",
+            "Payroll Administration",
+            "Business Intelligence and Analysis",
+            "Human Resource and Talent Solutions",
+            "Other"
+        ]
+
+        email_pattern = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+
+        if len(fullname) == 0 or len(fullname) > 50:
+            return jsonify({
+                "success": False,
+                "error": "Invalid full name. Maximum is 50 characters."
+            })
+
+        if not re.match(email_pattern, email):
+            return jsonify({
+                "success": False,
+                "error": "Invalid email address."
+            })
+
+        if not cellphone.isdigit() or len(cellphone) != 10:
+            return jsonify({
+                "success": False,
+                "error": "Invalid cellphone number. It must be exactly 10 digits."
+            })
+
+        if service not in valid_services:
+            return jsonify({
+                "success": False,
+                "error": "Invalid service selected."
+            })
+
+        if len(message) == 0 or len(message) > 100:
+            return jsonify({
+                "success": False,
+                "error": "Invalid message. Maximum is 100 characters."
+            })
+
+        if not SENDER_APP_PASSWORD:
+            return jsonify({
+                "success": False,
+                "error": "Email password is missing. Add SENDER_APP_PASSWORD in Render Environment Variables."
+            })
+
         email_message = EmailMessage()
         email_message["Subject"] = "New Mpofly Contact Form Message"
         email_message["From"] = SENDER_EMAIL
@@ -980,18 +1000,20 @@ Client Message:
 {message}
 """)
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as smtp:
             smtp.login(SENDER_EMAIL, SENDER_APP_PASSWORD)
             smtp.send_message(email_message)
 
         return jsonify({"success": True})
 
     except Exception as e:
-        print("Email sending error:", e)
+        print("Email sending error:")
+        print(traceback.format_exc())
+
         return jsonify({
             "success": False,
             "error": str(e)
-        })
+        }), 500
 
 
 if __name__ == "__main__":
