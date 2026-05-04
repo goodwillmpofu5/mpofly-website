@@ -446,6 +446,15 @@ website_html = """
             margin-top: 4px;
         }
 
+        .wake-note {
+            background-color: #fff7d6;
+            color: #6b4e00;
+            padding: 10px 15px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
         @media (max-width: 768px) {
             header {
                 text-align: center;
@@ -490,6 +499,10 @@ website_html = """
 </head>
 
 <body>
+    <div class="wake-note">
+        If the website was inactive, it may take a few seconds to wake up on the first visit.
+    </div>
+
     <header>
         <div class="header-content">
             <div class="business-title">
@@ -901,5 +914,28 @@ def home():
     )
 
 
+# ==========================
+# HEALTH CHECK ROUTE
+# ==========================
+# Use this URL in UptimeRobot, cron-job.org, or another free uptime monitor:
+# https://www.mpofly.co.za/health
+#
+# Set the monitor to ping this route every 10 minutes.
+# This helps reduce sleeping on Render Free by sending regular inbound traffic.
+@app.route("/health")
+def health():
+    return {
+        "status": "ok",
+        "service": "mpofly",
+        "message": "Mpofly website is running"
+    }, 200
+
+
+# ==========================
+# RENDER STARTUP SETTINGS
+# ==========================
+# Render provides the PORT automatically.
+# Locally, the app will use port 5000.
 if __name__ == "__main__":
-    app.run(debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
