@@ -446,15 +446,6 @@ website_html = """
             margin-top: 4px;
         }
 
-        .wake-note {
-            background-color: #fff7d6;
-            color: #6b4e00;
-            padding: 10px 15px;
-            text-align: center;
-            font-size: 14px;
-            font-weight: bold;
-        }
-
         @media (max-width: 768px) {
             header {
                 text-align: center;
@@ -499,10 +490,6 @@ website_html = """
 </head>
 
 <body>
-    <div class="wake-note">
-        If the website was inactive, it may take a few seconds to wake up on the first visit.
-    </div>
-
     <header>
         <div class="header-content">
             <div class="business-title">
@@ -905,6 +892,7 @@ website_html = """
 @app.route("/")
 def home():
     logo_url = url_for("static", filename=LOGO_FILENAME)
+
     return render_template_string(
         website_html,
         logo_url=logo_url,
